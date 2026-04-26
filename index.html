@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scriptd — Your Fandom. Your Story. Your People.</title>
+  <meta name="description" content="Scriptd is a peer-to-peer community app where fans create communities, chat, blog, and roleplay with real people who share their obsessions." />
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #08091a;
+      --bg2:        #0d0f27;
+      --surface:    #131630;
+      --surface2:   #1a1e3d;
+      --border:     rgba(139, 92, 246, 0.15);
+      --purple:     #8b5cf6;
+      --purple-dim: #6d28d9;
+      --purple-glow:#a78bfa;
+      --coral:      #f97316;
+      --text:       #e2e8f0;
+      --muted:      #94a3b8;
+      --subtle:     #475569;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Noise texture overlay ────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    /* ── Ambient glow blobs ───────────────────────────────────── */
+    .glow-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .glow-bg span {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.18;
+      animation: blobDrift 18s ease-in-out infinite;
+    }
+    .glow-bg span:nth-child(1) {
+      width: 600px; height: 600px;
+      background: var(--purple);
+      top: -100px; left: -150px;
+      animation-delay: 0s;
+    }
+    .glow-bg span:nth-child(2) {
+      width: 400px; height: 400px;
+      background: var(--coral);
+      bottom: -80px; right: -100px;
+      animation-delay: -6s;
+      opacity: 0.12;
+    }
+    .glow-bg span:nth-child(3) {
+      width: 350px; height: 350px;
+      background: #4f46e5;
+      top: 40%; left: 55%;
+      animation-delay: -12s;
+      opacity: 0.1;
+    }
+    @keyframes blobDrift {
+      0%,100% { transform: translate(0,0) scale(1); }
+      33%      { transform: translate(30px,-40px) scale(1.05); }
+      66%      { transform: translate(-20px,25px) scale(0.96); }
+    }
+
+    /* ── Floating tag canvas ──────────────────────────────────── */
+    #tag-field {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      overflow: hidden;
+    }
+    .ftag {
+      position: absolute;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      border: 1px solid;
+      opacity: 0;
+      animation: tagFloat linear infinite;
+      will-change: transform, opacity;
+    }
+
+    /* tag colour variants */
+    .ftag.c-purple  { color: #c4b5fd; border-color: rgba(196,181,253,0.25); background: rgba(139,92,246,0.08); }
+    .ftag.c-coral   { color: #fdba74; border-color: rgba(253,186,116,0.2);  background: rgba(249,115,22,0.07); }
+    .ftag.c-blue    { color: #93c5fd; border-color: rgba(147,197,253,0.2);  background: rgba(59,130,246,0.07); }
+    .ftag.c-pink    { color: #f9a8d4; border-color: rgba(249,168,212,0.2);  background: rgba(236,72,153,0.07); }
+    .ftag.c-teal    { color: #5eead4; border-color: rgba(94,234,212,0.2);   background: rgba(20,184,166,0.07); }
+
+    @keyframes tagFloat {
+      0%   { opacity: 0; transform: translateY(0)      rotate(var(--rot)); }
+      8%   { opacity: var(--peak-opacity); }
+      92%  { opacity: var(--peak-opacity); }
+      100% { opacity: 0; transform: translateY(-110vh) rotate(var(--rot)); }
+    }
+
+    /* ── Layout wrapper ───────────────────────────────────────── */
+    .page {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Nav ──────────────────────────────────────────────────── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 32px;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.1s forwards;
+    }
+    .nav-logo {
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #fff;
+    }
+    .nav-logo span { color: var(--purple-glow); }
+    .nav-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--purple-glow);
+      background: rgba(139,92,246,0.15);
+      border: 1px solid rgba(139,92,246,0.3);
+      border-radius: 999px;
+      padding: 4px 12px;
+    }
+
+    /* ── Hero ─────────────────────────────────────────────────── */
+    .hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 60px 24px 80px;
+      gap: 0;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--purple-glow);
+      background: rgba(139,92,246,0.1);
+      border: 1px solid rgba(139,92,246,0.25);
+      border-radius: 999px;
+      padding: 6px 16px;
+      margin-bottom: 36px;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.25s forwards;
+    }
+    .hero-eyebrow::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--purple-glow);
+      animation: pulse 2s ease infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    h1 {
+      font-size: clamp(4rem, 14vw, 9rem);
+      font-weight: 900;
+      letter-spacing: -0.045em;
+      line-height: 0.95;
+      color: #fff;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.4s forwards;
+      position: relative;
+    }
+    h1 .accent {
+      background: linear-gradient(135deg, var(--purple-glow) 0%, #c084fc 40%, var(--coral) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .tagline {
+      margin-top: 28px;
+      font-size: clamp(1.1rem, 3vw, 1.45rem);
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: -0.01em;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.55s forwards;
+    }
+    .tagline strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .description {
+      margin-top: 20px;
+      max-width: 520px;
+      font-size: 1rem;
+      line-height: 1.7;
+      color: var(--subtle);
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.7s forwards;
+    }
+    .description em {
+      color: var(--muted);
+      font-style: normal;
+    }
+
+    /* ── Genre pill strip ─────────────────────────────────────── */
+    .genre-strip {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 36px;
+      max-width: 560px;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.85s forwards;
+    }
+    .genre-pill {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      cursor: default;
+    }
+    .genre-pill:hover {
+      border-color: rgba(139,92,246,0.4);
+      color: var(--purple-glow);
+      background: rgba(139,92,246,0.1);
+    }
+
+    /* ── Signup form ──────────────────────────────────────────── */
+    .signup-wrap {
+      margin-top: 52px;
+      width: 100%;
+      max-width: 460px;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 1s forwards;
+    }
+
+    .signup-form {
+      display: flex;
+      gap: 0;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(139,92,246,0.3);
+      background: var(--surface);
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .signup-form:focus-within {
+      border-color: rgba(139,92,246,0.7);
+      box-shadow: 0 0 0 4px rgba(139,92,246,0.12), 0 8px 32px rgba(139,92,246,0.15);
+    }
+
+    .signup-form input {
+      flex: 1;
+      min-width: 0;
+      background: transparent;
+      border: none;
+      outline: none;
+      padding: 16px 20px;
+      font-size: 0.95rem;
+      color: var(--text);
+      font-family: inherit;
+    }
+    .signup-form input::placeholder { color: var(--subtle); }
+
+    .signup-form button {
+      flex-shrink: 0;
+      background: linear-gradient(135deg, var(--purple-dim), var(--purple));
+      color: #fff;
+      border: none;
+      padding: 16px 24px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      font-family: inherit;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      white-space: nowrap;
+    }
+    .signup-form button:hover  { opacity: 0.9; }
+    .signup-form button:active { transform: scale(0.98); }
+
+    /* success state */
+    .signup-form.success {
+      border-color: rgba(94,234,212,0.4);
+      box-shadow: 0 0 0 4px rgba(94,234,212,0.08);
+    }
+    .signup-form.success button {
+      background: linear-gradient(135deg, #0f766e, #14b8a6);
+    }
+
+    .trust-line {
+      margin-top: 12px;
+      font-size: 0.78rem;
+      color: var(--subtle);
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .trust-line::before {
+      content: '🔒';
+      font-size: 0.75rem;
+      filter: grayscale(1) brightness(0.6);
+    }
+
+    /* ── Community cards strip (decorative) ──────────────────── */
+    .cards-row {
+      margin-top: 72px;
+      width: 100%;
+      overflow: hidden;
+      position: relative;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 1.15s forwards;
+    }
+    .cards-row::before,
+    .cards-row::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 80px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .cards-row::before { left: 0;  background: linear-gradient(to right,  var(--bg), transparent); }
+    .cards-row::after  { right: 0; background: linear-gradient(to left,   var(--bg), transparent); }
+
+    .cards-track {
+      display: flex;
+      gap: 14px;
+      animation: marquee 38s linear infinite;
+      width: max-content;
+    }
+    .cards-track:hover { animation-play-state: paused; }
+
+    @keyframes marquee {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    .card {
+      flex-shrink: 0;
+      width: 200px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: rgba(139,92,246,0.35); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card-avatar {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+    .card-meta { min-width: 0; }
+    .card-name {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-members {
+      font-size: 0.66rem;
+      color: var(--subtle);
+    }
+    .card-tag {
+      display: inline-block;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(139,92,246,0.12);
+      color: var(--purple-glow);
+      border: 1px solid rgba(139,92,246,0.2);
+      align-self: flex-start;
+    }
+    .card-tag.coral { background: rgba(249,115,22,0.1); color: #fdba74; border-color: rgba(249,115,22,0.2); }
+    .card-tag.blue  { background: rgba(59,130,246,0.1); color: #93c5fd; border-color: rgba(59,130,246,0.2); }
+    .card-tag.pink  { background: rgba(236,72,153,0.1); color: #f9a8d4; border-color: rgba(236,72,153,0.2); }
+    .card-tag.teal  { background: rgba(20,184,166,0.1); color: #5eead4; border-color: rgba(20,184,166,0.2); }
+
+    .card-preview {
+      font-size: 0.7rem;
+      line-height: 1.5;
+      color: var(--subtle);
+    }
+
+    /* ── Footer ───────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 40px 24px;
+      font-size: 0.75rem;
+      color: var(--subtle);
+      opacity: 0;
+      animation: fadeUp 0.6s ease 1.3s forwards;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    footer a {
+      color: var(--subtle);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    footer a:hover { color: var(--purple-glow); }
+
+    /* ── Animations ───────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Mobile ───────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      nav { padding: 20px; }
+
+      .signup-form {
+        flex-direction: column;
+        border-radius: 14px;
+      }
+      .signup-form input  { padding: 16px 18px; }
+      .signup-form button {
+        padding: 16px;
+        border-radius: 0 0 12px 12px;
+        text-align: center;
+      }
+
+      .genre-strip { gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient glow -->
+  <div class="glow-bg" aria-hidden="true">
+    <span></span><span></span><span></span>
+  </div>
+
+  <!-- Floating tag field (populated by JS) -->
+  <div id="tag-field" aria-hidden="true"></div>
+
+  <!-- Page content -->
+  <div class="page">
+
+    <nav>
+      <div class="nav-logo">Script<span>d</span></div>
+      <div class="nav-badge">Coming Soon</div>
+    </nav>
+
+    <main class="hero">
+
+      <div class="hero-eyebrow">Early Access Open</div>
+
+      <h1><span class="accent">Scriptd</span></h1>
+
+      <p class="tagline">
+        <strong>Your fandom.</strong> Your story. Your people.
+      </p>
+
+      <p class="description">
+        Scriptd is a safe, peer-to-peer community app where fans create their own communities, chat, blog, and roleplay with <em>real people who share their obsessions</em>. Find your people, build your world, write your story.
+      </p>
+
+      <div class="genre-strip" aria-label="Supported fandoms">
+        <span class="genre-pill">Anime</span>
+        <span class="genre-pill">Roleplay</span>
+        <span class="genre-pill">K-Pop</span>
+        <span class="genre-pill">Gaming</span>
+        <span class="genre-pill">Fantasy</span>
+        <span class="genre-pill">Sci-Fi</span>
+        <span class="genre-pill">Comics</span>
+        <span class="genre-pill">Horror</span>
+        <span class="genre-pill">LGBTQ+</span>
+        <span class="genre-pill">Film & TV</span>
+      </div>
+
+      <div class="signup-wrap">
+        <form class="signup-form" id="signupForm" novalidate>
+          <input
+            type="email"
+            id="emailInput"
+            name="email"
+            placeholder="your@email.com"
+            autocomplete="email"
+            required
+            aria-label="Email address"
+          />
+          <button type="submit" id="submitBtn">Get Early Access</button>
+        </form>
+        <p class="trust-line">No spam. Just updates when we launch.</p>
+      </div>
+
+      <!-- Decorative community cards -->
+      <div class="cards-row" aria-hidden="true">
+        <div class="cards-track" id="cardsTrack"></div>
+      </div>
+
+    </main>
+
+    <footer>
+      <div>© 2026 Scriptd · <a href="mailto:hello@scriptd.xyz">hello@scriptd.xyz</a></div>
+      <div><a href="#">Privacy</a> · <a href="#">Terms</a></div>
+    </footer>
+
+  </div>
+
+  <script>
+    /* ── Floating tags ───────────────────────────────────────── */
+    const TAGS = [
+      ['Anime', 'c-purple'], ['Fantasy', 'c-blue'], ['Roleplay', 'c-pink'],
+      ['K-Pop', 'c-coral'],  ['Gaming', 'c-teal'],  ['Sci-Fi', 'c-blue'],
+      ['Horror', 'c-purple'],['Comics', 'c-coral'],  ['Lore', 'c-teal'],
+      ['Fanfic', 'c-pink'],  ['OC', 'c-purple'],    ['Ships', 'c-pink'],
+      ['Cosplay', 'c-coral'],['Worldbuilding', 'c-blue'],['BTS', 'c-pink'],
+      ['Elden Ring', 'c-teal'],['Hogwarts', 'c-purple'],['LOTR', 'c-blue'],
+      ['Marvel', 'c-coral'], ['DnD', 'c-teal'],     ['Vocaloid', 'c-pink'],
+    ];
+
+    const field = document.getElementById('tag-field');
+    const W = () => window.innerWidth;
+    const H = () => window.innerHeight;
+
+    function spawnTag() {
+      const [label, cls] = TAGS[Math.floor(Math.random() * TAGS.length)];
+      const el = document.createElement('span');
+      el.className = `ftag ${cls}`;
+      el.textContent = label;
+
+      const rot   = (Math.random() * 16 - 8).toFixed(1) + 'deg';
+      const dur   = (18 + Math.random() * 22).toFixed(1) + 's';
+      const delay = (Math.random() * -30).toFixed(1) + 's';
+      const left  = (Math.random() * 95).toFixed(1) + '%';
+      const peak  = (0.25 + Math.random() * 0.35).toFixed(2);
+      const startY = (H() * 0.6 + Math.random() * H() * 0.5).toFixed(0) + 'px';
+
+      el.style.cssText = `
+        left: ${left};
+        top: ${startY};
+        --rot: ${rot};
+        --peak-opacity: ${peak};
+        animation-duration: ${dur};
+        animation-delay: ${delay};
+      `;
+
+      field.appendChild(el);
+
+      // clean up after 3 cycles to prevent DOM bloat
+      setTimeout(() => el.remove(), (parseFloat(dur) * 3 + Math.abs(parseFloat(delay))) * 1000);
+    }
+
+    // seed initial batch
+    for (let i = 0; i < 22; i++) spawnTag();
+    setInterval(spawnTag, 2200);
+
+    /* ── Community cards ──────────────────────────────────────── */
+    const CARDS = [
+      { emoji: '⚔️',  bg: '#1e1040', name: 'Elden Ring RP',   tag: 'Fantasy',    tagCls: '',      preview: 'Tarnished souls wandering the Lands Between…' },
+      { emoji: '🌸',  bg: '#1a0a2e', name: 'Haikyuu!! Fandom',tag: 'Anime',      tagCls: 'pink',  preview: 'Latest arc spoilers + ship discussions 👀' },
+      { emoji: '🎮',  bg: '#0a1a2e', name: 'Genshin Writers',  tag: 'Gaming',     tagCls: 'blue',  preview: 'Lore deep-dives & original characters welcome' },
+      { emoji: '🌙',  bg: '#1a1025', name: 'Dark Fantasy OCs',  tag: 'Roleplay',   tagCls: '',      preview: 'Slow-burn literate RP. Vampires & elves ok.' },
+      { emoji: '💜',  bg: '#1a0820', name: 'BTS ARMY Base',     tag: 'K-Pop',      tagCls: 'pink',  preview: 'Fan cams, theories, concert recaps & more' },
+      { emoji: '🚀',  bg: '#0a1525', name: 'Sci-Fi Builders',   tag: 'Sci-Fi',     tagCls: 'blue',  preview: 'Collaborative worldbuilding. No FTL drama.' },
+      { emoji: '🎭',  bg: '#1a1a0a', name: 'Character Dev',     tag: 'Lore',       tagCls: 'teal',  preview: 'Share your OCs, get feedback, find RP partners' },
+      { emoji: '🐉',  bg: '#0a1a10', name: 'Dragon Age Guild',  tag: 'RPG',        tagCls: 'teal',  preview: 'In Hushed Whispers but make it unhinged' },
+      { emoji: '👻',  bg: '#1a0a10', name: 'Horror Scribes',    tag: 'Horror',     tagCls: 'coral', preview: 'Psychological horror RP. You will be afraid.' },
+      { emoji: '🌈',  bg: '#1a0a2e', name: 'Queer Fandom Hub',  tag: 'LGBTQ+',     tagCls: 'pink',  preview: 'An inclusive space for fans of all backgrounds' },
+    ];
+
+    function buildCard(c) {
+      return `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-avatar" style="background:${c.bg}">${c.emoji}</div>
+            <div class="card-meta">
+              <div class="card-name">${c.name}</div>
+            </div>
+          </div>
+          <span class="card-tag ${c.tagCls}">${c.tag}</span>
+          <p class="card-preview">${c.preview}</p>
+        </div>`;
+    }
+
+    const track = document.getElementById('cardsTrack');
+    // double the list for seamless marquee
+    const all = [...CARDS, ...CARDS];
+    track.innerHTML = all.map(buildCard).join('');
+
+    /* ── Email signup ─────────────────────────────────────────── */
+    const form   = document.getElementById('signupForm');
+    const input  = document.getElementById('emailInput');
+    const btn    = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = input.value.trim();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        input.style.outline = '2px solid rgba(249,115,22,0.6)';
+        input.focus();
+        setTimeout(() => input.style.outline = '', 1200);
+        return;
+      }
+
+      btn.textContent = 'Joining…';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (!res.ok) throw new Error();
+        input.disabled = true;
+        btn.textContent = '✓ You\'re in!';
+        form.classList.add('success');
+      } catch {
+        btn.textContent = 'Get Early Access';
+        btn.disabled = false;
+        input.style.outline = '2px solid rgba(249,115,22,0.6)';
+        setTimeout(() => input.style.outline = '', 1200);
+      }
+    });
+  </script>
+
+</body>
+</html>
