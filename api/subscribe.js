@@ -1,7 +1,4 @@
-import { google } from 'googleapis';
-
-const SHEET_ID = '1i3UUfXEHN-hDTqcDuU7_CPRoyEvBwmi-xuf3L_NkteE';
-const SHEET_TAB = 'Sheet1';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzxXFrh10l0h4Sh4082mdPsxU6bAZ3MpDNvn5yLYPwV7t_YN5MNHxG_xQ5A5PEP_V6U/exec';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,23 +14,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
     });
 
-    const sheets = google.sheets({ version: 'v4', auth });
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_TAB}!A:B`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[email, new Date().toISOString()]],
-      },
-    });
+    if (!response.ok) throw new Error(`Apps Script error: ${response.status}`);
 
     return res.status(200).json({ ok: true });
   } catch (err) {
