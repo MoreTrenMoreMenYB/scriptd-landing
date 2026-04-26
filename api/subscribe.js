@@ -22,6 +22,9 @@ export default async function handler(req, res) {
 
     if (!response.ok) throw new Error(`Apps Script error: ${response.status}`);
 
+    const result = await response.json();
+    if (result.duplicate) return res.status(409).json({ duplicate: true });
+
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);

@@ -677,6 +677,13 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email }),
         });
+        const data = await res.json();
+        if (res.status === 409 || data.duplicate) {
+          btn.textContent = 'Already signed up!';
+          btn.disabled = false;
+          form.classList.add('success');
+          return;
+        }
         if (!res.ok) throw new Error();
         input.disabled = true;
         btn.textContent = '✓ You\'re in!';
